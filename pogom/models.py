@@ -9,13 +9,13 @@ import time
 import geopy
 from peewee import SqliteDatabase, InsertQuery, \
     IntegerField, CharField, DoubleField, BooleanField, \
-    DateTimeField, fn, DeleteQuery, CompositeKey, FloatField, SQL, TextField
+    DateTimeField, fn, DeleteQuery, CompositeKey, FloatField, SQL, TextField, JOIN
 from playhouse.flask_utils import FlaskDB
 from playhouse.pool import PooledMySQLDatabase
 from playhouse.shortcuts import RetryOperationalError
 from playhouse.migrate import migrate, MySQLMigrator, SqliteMigrator
 from datetime import datetime, timedelta
-from base64 import b64encode
+from base64 import b64encode, b64decode
 from cachetools import TTLCache
 from cachetools import cached
 
@@ -30,8 +30,190 @@ args = get_args()
 flaskDb = FlaskDB()
 cache = TTLCache(maxsize=100, ttl=60 * 5)
 
-db_schema_version = 7
+db_schema_version = 8
 
+moveset = [
+    "MoveUnset",
+    "ThunderShock",
+    "QuickAttack",
+    "Scratch",
+    "Ember",
+    "VineWhip",
+    "Tackle",
+    "RazorLeaf",
+    "TakeDown",
+    "WaterGun",
+    "Bite",
+    "Pound",
+    "DoubleSlap",
+    "Wrap",
+    "HyperBeam",
+    "Lick",
+    "DarkPulse",
+    "Smog",
+    "Sludge",
+    "MetalClaw",
+    "ViceGrip",
+    "FlameWheel",
+    "Megahorn",
+    "WingAttack",
+    "Flamethrower",
+    "SuckerPunch",
+    "Dig",
+    "LowKick",
+    "CrossChop",
+    "PsychoCut",
+    "Psybeam",
+    "Earthquake",
+    "StoneEdge",
+    "IcePunch",
+    "HeartStamp",
+    "Discharge",
+    "FlashCannon",
+    "Peck",
+    "DrillPeck",
+    "IceBeam",
+    "Blizzard",
+    "AirSlash",
+    "HeatWave",
+    "Twineedle",
+    "PoisonJab",
+    "AerialAce",
+    "DrillRun",
+    "PetalBlizzard",
+    "MegaDrain",
+    "BugBuzz",
+    "PoisonFang",
+    "NightSlash",
+    "Slash",
+    "BubbleBeam",
+    "Submission",
+    "KarateChop",
+    "LowSweep",
+    "AquaJet",
+    "AquaTail",
+    "SeedBomb",
+    "Psyshock",
+    "RockThrow",
+    "AncientPower",
+    "RockTomb",
+    "RockSlide",
+    "PowerGem",
+    "ShadowSneak",
+    "ShadowPunch",
+    "ShadowClaw",
+    "OminousWind",
+    "ShadowBall",
+    "BulletPunch",
+    "MagnetBomb",
+    "SteelWing",
+    "IronHead",
+    "ParabolicCharge",
+    "Spark",
+    "ThunderPunch",
+    "Thunder",
+    "Thunderbolt",
+    "Twister",
+    "DragonBreath",
+    "DragonPulse",
+    "DragonClaw",
+    "DisarmingVoice",
+    "DrainingKiss",
+    "DazzlingGleam",
+    "Moonblast",
+    "PlayRough",
+    "CrossPoison",
+    "SludgeBomb",
+    "SludgeWave",
+    "GunkShot",
+    "MudShot",
+    "BoneClub",
+    "Bulldoze",
+    "MudBomb",
+    "FuryCutter",
+    "BugBite",
+    "SignalBeam",
+    "XScissor",
+    "FlameCharge",
+    "FlameBurst",
+    "FireBlast",
+    "Brine",
+    "WaterPulse",
+    "Scald",
+    "HydroPump",
+    "Psychic",
+    "Psystrike",
+    "IceShard",
+    "IcyWind",
+    "FrostBreath",
+    "Absorb",
+    "GigaDrain",
+    "FirePunch",
+    "SolarBeam",
+    "LeafBlade",
+    "PowerWhip",
+    "Splash",
+    "Acid",
+    "AirCutter",
+    "Hurricane",
+    "BrickBreak",
+    "Cut",
+    "Swift",
+    "HornAttack",
+    "Stomp",
+    "Headbutt",
+    "HyperFang",
+    "Slam",
+    "BodySlam",
+    "Rest",
+    "Struggle",
+    "ScaldBlastoise",
+    "HydroPumpBlastoise",
+    "WrapGreen",
+    "WrapPink",
+    "FuryCutterFast",
+    "BugBiteFast",
+    "BiteFast",
+    "SuckerPunchFast",
+    "DragonBreathFast",
+    "ThunderShockFast",
+    "SparkFast",
+    "LowKickFast",
+    "KarateChopFast",
+    "EmberFast",
+    "WingAttackFast",
+    "PeckFast",
+    "LickFast",
+    "ShadowClawFast",
+    "VineWhipFast",
+    "RazorLeafFast",
+    "MudShotFast",
+    "IceShardFast",
+    "FrostBreathFast",
+    "QuickAttackFast",
+    "ScratchFast",
+    "TackleFast",
+    "PoundFast",
+    "CutFast",
+    "PoisonJabFast",
+    "AcidFast",
+    "PsychoCutFast",
+    "RockThrowFast",
+    "MetalClawFast",
+    "BulletPunchFast",
+    "WaterGunFast",
+    "SplashFast",
+    "WaterGunFastBlastoise",
+    "MudSlapFast",
+    "ZenHeadbuttFast",
+    "ConfusionFast",
+    "PoisonStingFast",
+    "BubbleFast",
+    "FeintAttackFast",
+    "SteelWingFast",
+    "FireFangFast",
+    "RockSmashFast"
+];
 
 class MyRetryDB(RetryOperationalError, PooledMySQLDatabase):
     pass
@@ -91,12 +273,18 @@ class Pokemon(BaseModel):
     def get_active(swLat, swLng, neLat, neLng):
         if swLat is None or swLng is None or neLat is None or neLng is None:
             query = (Pokemon
-                     .select()
+                     .select(PokemonIVs, Pokemon)
+                     .join(PokemonIVs,
+                           join_type=JOIN.LEFT_OUTER,
+                           on=(Pokemon.encounter_id == PokemonIVs.encounter_id))
                      .where(Pokemon.disappear_time > datetime.utcnow())
                      .dicts())
         else:
             query = (Pokemon
-                     .select()
+                     .select(PokemonIVs, Pokemon)
+                     .join(PokemonIVs,
+                           join_type=JOIN.LEFT_OUTER,
+                           on=(Pokemon.encounter_id == PokemonIVs.encounter_id))
                      .where((Pokemon.disappear_time > datetime.utcnow()) &
                             (((Pokemon.latitude >= swLat) &
                               (Pokemon.longitude >= swLng) &
@@ -328,6 +516,21 @@ class Pokemon(BaseModel):
 
         return filtered
 
+    @classmethod
+    def seen_before(cls, encounter_id):
+        return (Pokemon
+                .select()
+                .where(Pokemon.encounter_id == encounter_id)
+                .exists())
+
+
+class PokemonIVs(BaseModel):
+    encounter_id = CharField(primary_key=True, max_length=50)
+    iv_defense = IntegerField()
+    iv_stamina = IntegerField()
+    iv_attack = IntegerField()
+    move_1 = IntegerField(null=True)
+    move_2 = IntegerField(null=True)
 
 class Pokestop(BaseModel):
     pokestop_id = CharField(primary_key=True, max_length=50)
@@ -572,9 +775,32 @@ def hex_bounds(center, steps):
     w = get_new_coords(center, sp_dist, 270)[1]
     return (n, e, s, w)
 
+def encounter_request(api, pokemon, jitter=False):
+    position = [pokemon['latitude'], pokemon['longitude'], 0]
+    if jitter:
+        scan_location = jitterLocation(position)
+    else:
+        scan_location = position
+
+    try:
+        #encounter_id = long(b64decode(pokemon['encounter_id']))
+        encounter_id = pokemon['encounter_id']
+        return api.encounter(encounter_id=encounter_id,
+                             spawn_point_id=pokemon['spawn_point_id'],
+                             player_latitude=scan_location[0],
+                             player_longitude=scan_location[1])
+    except Exception as e:
+        log.warning('Exception while downloading pokemon ivs: %s', e)
+        return False
+
+def get_move_name(id):
+    if id > 199:
+        id -= 62
+    #print "move: " + str(id)
+    return moveset[id]
 
 # todo: this probably shouldn't _really_ be in "models" anymore, but w/e
-def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue):
+def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue, api):
     pokemons = {}
     pokestops = {}
     gyms = {}
@@ -593,28 +819,55 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue):
                     # Set a value of 15 minutes because currently its unknown but larger than 15.
                     d_t = datetime.utcfromtimestamp((p['last_modified_timestamp_ms'] + 900000) / 1000.0)
 
+                #print 'In models:'
+                #print p
                 printPokemon(p['pokemon_data']['pokemon_id'], p['latitude'],
                              p['longitude'], d_t)
-                pokemons[p['encounter_id']] = {
-                    'encounter_id': b64encode(str(p['encounter_id'])),
-                    'spawnpoint_id': p['spawn_point_id'],
-                    'pokemon_id': p['pokemon_data']['pokemon_id'],
-                    'latitude': p['latitude'],
-                    'longitude': p['longitude'],
-                    'disappear_time': d_t
-                }
-
-                if args.webhooks:
-                    wh_update_queue.put(('pokemon', {
-                        'encounter_id': b64encode(str(p['encounter_id'])),
+                b64encounter_id = b64encode(str(p['encounter_id']))
+                if (not Pokemon.seen_before(b64encounter_id)):
+                    pokemons[p['encounter_id']] = {
+                        'encounter_id': b64encounter_id,
                         'spawnpoint_id': p['spawn_point_id'],
                         'pokemon_id': p['pokemon_data']['pokemon_id'],
                         'latitude': p['latitude'],
                         'longitude': p['longitude'],
-                        'disappear_time': calendar.timegm(d_t.timetuple()),
-                        'last_modified_time': p['last_modified_timestamp_ms'],
-                        'time_until_hidden_ms': p['time_till_hidden_ms']
-                    }))
+                        'disappear_time': d_t
+                    }
+
+                    poke_id = p['pokemon_data']['pokemon_id']
+                    poke_rarity = get_pokemon_rarity(poke_id).lower()
+                    if poke_rarity == "very rare" or poke_rarity == "ultra rare": 
+                        print poke_rarity + ": " + str(poke_id)
+
+                        time.sleep(1)
+                        response = encounter_request(api, p, False)
+                        encounter = response['responses']['ENCOUNTER']
+                        data = encounter['wild_pokemon']['pokemon_data']
+                        iv_attack = data.get('individual_attack', 0)
+                        iv_defense = data.get('individual_defense', 0)
+                        iv_stamina = data.get('individual_stamina', 0)
+
+                        print iv_attack, iv_defense, iv_stamina
+
+                        perfect = (iv_attack + iv_defense + iv_stamina) / float(45) * 100
+                        print "Perfection: " + str(perfect)
+
+                        if args.webhooks:
+                            wh_update_queue.put(('pokemon', {
+                                'encounter_id': b64encode(str(p['encounter_id'])),
+                                'spawnpoint_id': p['spawn_point_id'],
+                                'pokemon_id': p['pokemon_data']['pokemon_id'],
+                                'latitude': p['latitude'],
+                                'longitude': p['longitude'],
+                                'disappear_time': calendar.timegm(d_t.timetuple()),
+                                'last_modified_time': p['last_modified_timestamp_ms'],
+                                'time_until_hidden_ms': p['time_till_hidden_ms'],
+                                'iv_attack': data.get('individual_attack', 0),
+                                'iv_defense': data.get('individual_defense', 0),
+                                'iv_stamina': data.get('individual_stamina', 0),
+                                'move_1' : get_move_name(data.get('move_1', 0)),
+                                'move_2' : get_move_name(data.get('move_2', 0))
+                            }))
 
         for f in cell.get('forts', []):
             if config['parse_pokestops'] and f.get('type') == 1:  # Pokestops
@@ -713,6 +966,7 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue):
 
     return {
         'count': len(pokemons) + len(pokestops) + len(gyms),
+        'pokemons': pokemons,
         'gyms': gyms,
     }
 
@@ -924,13 +1178,13 @@ def bulk_upsert(cls, data):
 def create_tables(db):
     db.connect()
     verify_database_schema(db)
-    db.create_tables([Pokemon, Pokestop, Gym, ScannedLocation, GymDetails, GymMember, GymPokemon, Trainer, MainWorker, WorkerStatus], safe=True)
+    db.create_tables([Pokemon, PokemonIVs, Pokestop, Gym, ScannedLocation, GymDetails, GymMember, GymPokemon, Trainer, MainWorker, WorkerStatus], safe=True)
     db.close()
 
 
 def drop_tables(db):
     db.connect()
-    db.drop_tables([Pokemon, Pokestop, Gym, ScannedLocation, Versions, GymDetails, GymMember, GymPokemon, Trainer, MainWorker, WorkerStatus, Versions], safe=True)
+    db.drop_tables([Pokemon, PokemonIVs, Pokestop, Gym, ScannedLocation, Versions, GymDetails, GymMember, GymPokemon, Trainer, MainWorker, WorkerStatus, Versions], safe=True)
     db.close()
 
 
@@ -1009,3 +1263,6 @@ def database_migrate(db, old_ver):
             migrator.drop_column('gymdetails', 'description'),
             migrator.add_column('gymdetails', 'description', TextField(null=True, default=""))
         )
+
+    if old_ver < 8:
+        db.create_tables([PokemonIVs], safe=True)
