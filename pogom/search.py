@@ -256,7 +256,6 @@ def worker_status_db_thread(threads_status, name, db_updates_queue):
 def search_overseer_thread(args, new_location_queue, pause_bit, encryption_lib_path, db_updates_queue, wh_queue):
 
     log.info('Search overseer starting')
-    print args.get_ivs
     search_items_queue = Queue()
     account_queue = Queue()
     threadStatus = {}
