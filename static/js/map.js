@@ -511,11 +511,7 @@ function openMapDirections (lat, lng) { // eslint-disable-line no-unused-vars
   window.open(url, '_blank')
 }
 
-<<<<<<< 5221fb66d60272a9712416c005b365c96edbdf59
-function pokemonLabel (name, rarity, types, disappearTime, id, latitude, longitude, encounterId) {
-=======
 function pokemonLabel (name, rarity, types, disappearTime, id, latitude, longitude, encounterId, ivAttack, ivDefense, ivStamina, move1, move2) {
->>>>>>> Added IV and moveset
   var disappearDate = new Date(disappearTime)
   var rarityDisplay = rarity ? '(' + rarity + ')' : ''
   var typesDisplay = ''
@@ -758,10 +754,7 @@ function isRangeActive (map) {
   return Store.get('showRanges')
 }
 
-<<<<<<< 5221fb66d60272a9712416c005b365c96edbdf59
 function customizePokemonMarker (marker, item, skipNotification) {
-=======
-function setupPokemonMarker (item, skipNotification, isBounceDisabled) {
   // Scale icon size up with the map exponentially
   var iconSize = 2 + (map.getZoom() - 3) * (map.getZoom() - 3) * 0.2 + Store.get('iconSizeModifier')
   var pokemonIndex = item['pokemon_id'] - 1
