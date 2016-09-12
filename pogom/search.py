@@ -30,14 +30,15 @@ from datetime import datetime
 from operator import itemgetter
 from threading import Thread
 from queue import Queue, Empty
+from base64 import b64decode
 
 from pgoapi import PGoApi
 from pgoapi.utilities import f2i
 from pgoapi import utilities as util
 from pgoapi.exceptions import AuthException
 
-from .models import parse_map, Pokemon, hex_bounds, GymDetails, parse_gyms, MainWorker, WorkerStatus
-from .transform import generate_location_steps
+from .models import parse_map, Pokemon, PokemonIVs, hex_bounds, GymDetails, parse_gyms, MainWorker, WorkerStatus
+from .transform import generate_location_steps  
 from .fakePogoApi import FakePogoApi
 from .utils import now
 
@@ -261,7 +262,7 @@ def worker_status_db_thread(threads_status, name, db_updates_queue):
 def search_overseer_thread(args, method, new_location_queue, pause_bit, encryption_lib_path, db_updates_queue, wh_queue):
 
     log.info('Search overseer starting')
-
+    print args.get_ivs
     search_items_queue = Queue()
     account_queue = Queue()
     threadStatus = {}
@@ -543,6 +544,7 @@ def get_sps_location_list(args, current_location, sps_scan_current):
     return retset
 
 
+
 def search_worker_thread(args, account_queue, account_failures, search_items_queue, pause_bit, encryption_lib_path, status, dbq, whq):
 
     log.debug('Search worker thread starting')
@@ -574,6 +576,7 @@ def search_worker_thread(args, account_queue, account_failures, search_items_que
                 api = FakePogoApi(args.mock)
             else:
                 api = PGoApi()
+                #print api
 
             if status['proxy_url']:
                 log.debug("Using proxy %s", status['proxy_url'])
@@ -657,7 +660,7 @@ def search_worker_thread(args, account_queue, account_failures, search_items_que
 
                 # Got the response, parse it out, send todo's to db/wh queues
                 try:
-                    parsed = parse_map(args, response_dict, step_location, dbq, whq)
+                    parsed = parse_map(args, response_dict, step_location, dbq, whq, api)
                     search_items_queue.task_done()
                     status[('success' if parsed['count'] > 0 else 'noitems')] += 1
                     status['message'] = 'Search at {:6f},{:6f} completed with {} finds'.format(step_location[0], step_location[1], parsed['count'])
@@ -668,6 +671,31 @@ def search_worker_thread(args, account_queue, account_failures, search_items_que
                     status['fail'] += 1
                     status['message'] = 'Map parse failed at {:6f},{:6f}, abandoning location. {} may be banned.'.format(step_location[0], step_location[1], account['username'])
                     log.exception(status['message'])
+                if args.get_ivs and parsed:
+                    # Get pokemon IVs
+                    for pokemon in parsed['pokemons'].values():
+                        status['message'] = \
+                            'Getting IVs for encounter {}' \
+                            .format(b64decode(pokemon['encounter_id']))
+                        time.sleep(random.random() + 2)
+                        response = encounter_request(api, pokemon, args.jitter)
+                        if response['responses']['ENCOUNTER']['status'] != 1:
+                            log.warning('Pokemon encounter {} failed'.format(
+                                        b64decode(pokemon['encounter_id'])))
+                        else:
+                            encounter = response['responses']['ENCOUNTER']
+                            data = encounter['wild_pokemon']['pokemon_data']
+                            #print "in search:"
+                            #print data
+                            pokemon_ivs = {pokemon['encounter_id']: {
+                                'encounter_id': pokemon['encounter_id'],
+                                'iv_attack': data.get('individual_attack', 0),
+                                'iv_defense': data.get('individual_defense', 0),
+                                'iv_stamina': data.get('individual_stamina', 0),
+                                'move_1' : data.get('move_1', 0),
+                                'move_2' : data.get('move_2', 0)
+                            }}
+                            dbq.put((PokemonIVs, pokemon_ivs))
 
                 # Get detailed information about gyms
                 if args.gym_info and parsed:
@@ -782,6 +810,24 @@ def map_request(api, position, jitter=False):
                                    cell_id=cell_ids)
     except Exception as e:
         log.warning('Exception while downloading map: %s', e)
+        return False
+
+
+def encounter_request(api, pokemon, jitter=False):
+    position = [pokemon['latitude'], pokemon['longitude'], 0]
+    if jitter:
+        scan_location = jitterLocation(position)
+    else:
+        scan_location = position
+
+    try:
+        encounter_id = long(b64decode(pokemon['encounter_id']))
+        return api.encounter(encounter_id=encounter_id,
+                             spawn_point_id=pokemon['spawnpoint_id'],
+                             player_latitude=scan_location[0],
+                             player_longitude=scan_location[1])
+    except Exception as e:
+        log.warning('Exception while downloading pokemon ivs: %s', e)
         return False
 
 

@@ -94,7 +94,7 @@ def makeWildPokemon(location):
             'last_modified_timestamp_ms': int((time() - 10) * 1000),
             'latitude': coords[0],
             'longitude': coords[1],
-            'pokemon_data': {'pokemon_id': randint(1, 140)},
+            'pokemon_data': {'pokemon_id': randint(1, 140), 'iv_attack': 999999},
             'spawn_point_id': cellId,
             'time_till_hidden_ms': randint(60, 600) * 1000
         })

@@ -1,0 +1,5 @@
+pzyuacc1
+password
+AIzaSyA69H5Lewr8tm1YTlDqUXDXJzcIOdn3Rf8
+1.286269, 103.859279
+python ./runserver.py -a ptc -u "pzyutestacc1" -p "password" -l "1.295779, 103.849066" -st 4 -k "AIzaSyA69H5Lewr8tm1YTlDqUXDXJzcIOdn3Rf8" -iv -cd -ng -nk -dc -wh http://127.0.0.1:4000
