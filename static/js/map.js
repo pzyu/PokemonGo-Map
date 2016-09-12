@@ -241,8 +241,6 @@ var Store = {
     localStorage.removeItem(key)
   }
 }
->>>>>>> Added IV and moveset
-
 //
 // Functions
 //

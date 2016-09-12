@@ -36,7 +36,7 @@ from pgoapi import utilities as util
 from pgoapi.exceptions import AuthException
 
 from .models import parse_map, Pokemon, PokemonIVs, hex_bounds, GymDetails, parse_gyms, MainWorker, WorkerStatus
-from .transform import generate_location_steps
+#from .transform import generate_location_steps
 from .fakePogoApi import FakePogoApi
 from .utils import now
 import schedulers
@@ -380,117 +380,117 @@ def search_overseer_thread(args, new_location_queue, pause_bit, encryption_lib_p
         # Now we just give a little pause here
         time.sleep(1)
 
-def get_hex_location_list(args, current_location):
-    # if we are only scanning for pokestops/gyms, then increase step radius to visibility range
-    if args.no_pokemon:
-        step_distance = 0.900
-    else:
-        step_distance = 0.070
+# def get_hex_location_list(args, current_location):
+#     # if we are only scanning for pokestops/gyms, then increase step radius to visibility range
+#     if args.no_pokemon:
+#         step_distance = 0.900
+#     else:
+#         step_distance = 0.070
 
-    # update our list of coords
-    locations = generate_location_steps(current_location, args.step_limit, step_distance)
+#     # update our list of coords
+#     locations = generate_location_steps(current_location, args.step_limit, step_distance)
 
-    # In hex "spawns only" mode, filter out scan locations with no history of pokemons
-    if args.spawnpoints_only and not args.no_pokemon:
-        n, e, s, w = hex_bounds(current_location, args.step_limit)
-        spawnpoints = set((d['latitude'], d['longitude']) for d in Pokemon.get_spawnpoints(s, w, n, e))
+#     # In hex "spawns only" mode, filter out scan locations with no history of pokemons
+#     if args.spawnpoints_only and not args.no_pokemon:
+#         n, e, s, w = hex_bounds(current_location, args.step_limit)
+#         spawnpoints = set((d['latitude'], d['longitude']) for d in Pokemon.get_spawnpoints(s, w, n, e))
 
-        if len(spawnpoints) == 0:
-            log.warning('No spawnpoints found in the specified area! (Did you forget to run a normal scan in this area first?)')
+#         if len(spawnpoints) == 0:
+#             log.warning('No spawnpoints found in the specified area! (Did you forget to run a normal scan in this area first?)')
 
-        def any_spawnpoints_in_range(coords):
-            return any(geopy.distance.distance(coords, x).meters <= 70 for x in spawnpoints)
+#         def any_spawnpoints_in_range(coords):
+#             return any(geopy.distance.distance(coords, x).meters <= 70 for x in spawnpoints)
 
-        locations = [coords for coords in locations if any_spawnpoints_in_range(coords)]
+#         locations = [coords for coords in locations if any_spawnpoints_in_range(coords)]
 
-    # put into the right struture with zero'ed before/after values
-    # locations = [(lat, lng, alt, ts_appears, ts_leaves),...]
-    locationsZeroed = []
-    for location in locations:
-        locationsZeroed.append(((location[0], location[1], 0), 0, 0))
+#     # put into the right struture with zero'ed before/after values
+#     # locations = [(lat, lng, alt, ts_appears, ts_leaves),...]
+#     locationsZeroed = []
+#     for location in locations:
+#         locationsZeroed.append(((location[0], location[1], 0), 0, 0))
 
-    return locationsZeroed
+#     return locationsZeroed
 
 
-def get_sps_location_list(args, current_location, sps_scan_current):
-    locations = []
+# def get_sps_location_list(args, current_location, sps_scan_current):
+#     locations = []
 
-    # Attempt to load spawns from file
-    if args.spawnpoint_scanning != 'nofile':
-        log.debug('Loading spawn points from json file @ %s', args.spawnpoint_scanning)
-        try:
-            with open(args.spawnpoint_scanning) as file:
-                locations = json.load(file)
-        except ValueError as e:
-            log.exception(e)
-            log.error('JSON error: %s; will fallback to database', e)
-        except IOError as e:
-            log.error('Error opening json file: %s; will fallback to database', e)
+#     # Attempt to load spawns from file
+#     if args.spawnpoint_scanning != 'nofile':
+#         log.debug('Loading spawn points from json file @ %s', args.spawnpoint_scanning)
+#         try:
+#             with open(args.spawnpoint_scanning) as file:
+#                 locations = json.load(file)
+#         except ValueError as e:
+#             log.exception(e)
+#             log.error('JSON error: %s; will fallback to database', e)
+#         except IOError as e:
+#             log.error('Error opening json file: %s; will fallback to database', e)
 
-    # No locations yet? Try the database!
-    if not len(locations):
-        log.debug('Loading spawn points from database')
-        locations = Pokemon.get_spawnpoints_in_hex(current_location, args.step_limit)
+#     # No locations yet? Try the database!
+#     if not len(locations):
+#         log.debug('Loading spawn points from database')
+#         locations = Pokemon.get_spawnpoints_in_hex(current_location, args.step_limit)
 
-    # Well shit...
-    if not len(locations):
-        raise Exception('No availabe spawn points!')
+#     # Well shit...
+#     if not len(locations):
+#         raise Exception('No availabe spawn points!')
 
-    # locations[]:
-    # {"lat": 37.53079079414139, "lng": -122.28811690874117, "spawnpoint_id": "808f9f1601d", "time": 511
+#     # locations[]:
+#     # {"lat": 37.53079079414139, "lng": -122.28811690874117, "spawnpoint_id": "808f9f1601d", "time": 511
 
-    log.info('Total of %d spawns to track', len(locations))
+#     log.info('Total of %d spawns to track', len(locations))
 
-    locations.sort(key=itemgetter('time'))
+#     locations.sort(key=itemgetter('time'))
 
-    if args.very_verbose:
-        for i in locations:
-            sec = i['time'] % 60
-            minute = (i['time'] / 60) % 60
-            m = 'Scan [{:02}:{:02}] ({}) @ {},{}'.format(minute, sec, i['time'], i['lat'], i['lng'])
-            log.debug(m)
+#     if args.very_verbose:
+#         for i in locations:
+#             sec = i['time'] % 60
+#             minute = (i['time'] / 60) % 60
+#             m = 'Scan [{:02}:{:02}] ({}) @ {},{}'.format(minute, sec, i['time'], i['lat'], i['lng'])
+#             log.debug(m)
 
-    # 'time' from json and db alike has been munged to appearance time as seconds after the hour
-    # Here we'll convert that to a real timestamp
-    for location in locations:
-        # For a scan which should cover all CURRENT pokemon, we can offset
-        # the comparison time by 15 minutes so that the "appears" time
-        # won't be rolled over to the next hour.
+#     # 'time' from json and db alike has been munged to appearance time as seconds after the hour
+#     # Here we'll convert that to a real timestamp
+#     for location in locations:
+#         # For a scan which should cover all CURRENT pokemon, we can offset
+#         # the comparison time by 15 minutes so that the "appears" time
+#         # won't be rolled over to the next hour.
 
-        # TODO: Make it work. The original logic (commented out) was producing
-        #       bogus results if your first scan was in the last 15 minute of
-        #       the hour. Wrapping my head around this isn't work right now,
-        #       so I'll just drop the feature for the time being. It does need
-        #       to come back so that repositioning/pausing works more nicely,
-        #       but we can live without it too.
+#         # TODO: Make it work. The original logic (commented out) was producing
+#         #       bogus results if your first scan was in the last 15 minute of
+#         #       the hour. Wrapping my head around this isn't work right now,
+#         #       so I'll just drop the feature for the time being. It does need
+#         #       to come back so that repositioning/pausing works more nicely,
+#         #       but we can live without it too.
 
-        # if sps_scan_current:
-        #     cursec = (location['time'] + 900) % 3600
-        # else:
-        cursec = location['time']
+#         # if sps_scan_current:
+#         #     cursec = (location['time'] + 900) % 3600
+#         # else:
+#         cursec = location['time']
 
-        if cursec > cur_sec():
-            # hasn't spawn in the current hour
-            from_now = location['time'] - cur_sec()
-            appears = now() + from_now
-        else:
-            # won't spawn till next hour
-            late_by = cur_sec() - location['time']
-            appears = now() + 3600 - late_by
+#         if cursec > cur_sec():
+#             # hasn't spawn in the current hour
+#             from_now = location['time'] - cur_sec()
+#             appears = now() + from_now
+#         else:
+#             # won't spawn till next hour
+#             late_by = cur_sec() - location['time']
+#             appears = now() + 3600 - late_by
 
-        location['appears'] = appears
-        location['leaves'] = appears + 900
+#         location['appears'] = appears
+#         location['leaves'] = appears + 900
 
-    # Put the spawn points in order of next appearance time
-    locations.sort(key=itemgetter('appears'))
+#     # Put the spawn points in order of next appearance time
+#     locations.sort(key=itemgetter('appears'))
 
-    # Match expected structure:
-    # locations = [((lat, lng, alt), ts_appears, ts_leaves),...]
-    retset = []
-    for location in locations:
-        retset.append(((location['lat'], location['lng'], 40.32), location['appears'], location['leaves']))
+#     # Match expected structure:
+#     # locations = [((lat, lng, alt), ts_appears, ts_leaves),...]
+#     retset = []
+#     for location in locations:
+#         retset.append(((location['lat'], location['lng'], 40.32), location['appears'], location['leaves']))
 
-    return retset
+    # return retset
 
 def search_worker_thread(args, account_queue, account_failures, search_items_queue, pause_bit, encryption_lib_path, status, dbq, whq):
 
