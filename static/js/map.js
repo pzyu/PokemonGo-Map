@@ -1176,7 +1176,6 @@ function processPokemons (i, item) {
       mapData.pokemons[item['encounter_id']] = item
       //item.marker = setupPokemonMarker(item)
       //mapData.pokemons[encounterId] = item
-
     }
   }
 }
