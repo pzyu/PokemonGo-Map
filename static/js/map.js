@@ -241,7 +241,6 @@ var Store = {
     localStorage.removeItem(key)
   }
 }
-
 //
 // Functions
 //
