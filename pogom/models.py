@@ -870,6 +870,20 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue, a
                                 'move_1' : get_move_name(data.get('move_1', 0)),
                                 'move_2' : get_move_name(data.get('move_2', 0))
                             }))
+                    # For everything else
+                    else:
+                        if args.webhooks:
+                            wh_update_queue.put(('pokemon', {
+                                'encounter_id': b64encode(str(p['encounter_id'])),
+                                'spawnpoint_id': p['spawn_point_id'],
+                                'pokemon_id': p['pokemon_data']['pokemon_id'],
+                                'latitude': p['latitude'],
+                                'longitude': p['longitude'],
+                                'disappear_time': calendar.timegm(d_t.timetuple()),
+                                'last_modified_time': p['last_modified_timestamp_ms'],
+                                'time_until_hidden_ms': p['time_till_hidden_ms']
+                            }))
+
 
         for f in cell.get('forts', []):
             if config['parse_pokestops'] and f.get('type') == 1:  # Pokestops
