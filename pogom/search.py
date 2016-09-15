@@ -28,13 +28,15 @@ import geopy.distance
 from datetime import datetime
 from threading import Thread
 from queue import Queue, Empty
+from base64 import b64decode
 
 from pgoapi import PGoApi
 from pgoapi.utilities import f2i
 from pgoapi import utilities as util
 from pgoapi.exceptions import AuthException
 
-from .models import parse_map, GymDetails, parse_gyms, MainWorker, WorkerStatus
+from .models import parse_map, Pokemon, PokemonIVs, hex_bounds, GymDetails, parse_gyms, MainWorker, WorkerStatus
+from .transform import generate_location_steps  
 from .fakePogoApi import FakePogoApi
 from .utils import now
 import schedulers
@@ -254,7 +256,7 @@ def worker_status_db_thread(threads_status, name, db_updates_queue):
 def search_overseer_thread(args, new_location_queue, pause_bit, encryption_lib_path, db_updates_queue, wh_queue):
 
     log.info('Search overseer starting')
-
+    print args.get_ivs
     search_items_queue = Queue()
     account_queue = Queue()
     threadStatus = {}
@@ -379,6 +381,119 @@ def search_overseer_thread(args, new_location_queue, pause_bit, encryption_lib_p
         # Now we just give a little pause here
         time.sleep(1)
 
+def get_hex_location_list(args, current_location):
+    # if we are only scanning for pokestops/gyms, then increase step radius to visibility range
+    if args.no_pokemon:
+        step_distance = 0.900
+    else:
+        step_distance = 0.070
+
+    # update our list of coords
+    locations = generate_location_steps(current_location, args.step_limit, step_distance)
+
+    # In hex "spawns only" mode, filter out scan locations with no history of pokemons
+    if args.spawnpoints_only and not args.no_pokemon:
+        n, e, s, w = hex_bounds(current_location, args.step_limit)
+        spawnpoints = set((d['latitude'], d['longitude']) for d in Pokemon.get_spawnpoints(s, w, n, e))
+
+        if len(spawnpoints) == 0:
+            log.warning('No spawnpoints found in the specified area! (Did you forget to run a normal scan in this area first?)')
+
+        def any_spawnpoints_in_range(coords):
+            return any(geopy.distance.distance(coords, x).meters <= 70 for x in spawnpoints)
+
+        locations = [coords for coords in locations if any_spawnpoints_in_range(coords)]
+
+    # put into the right struture with zero'ed before/after values
+    # locations = [(lat, lng, alt, ts_appears, ts_leaves),...]
+    locationsZeroed = []
+    for location in locations:
+        locationsZeroed.append(((location[0], location[1], 0), 0, 0))
+
+    return locationsZeroed
+
+
+def get_sps_location_list(args, current_location, sps_scan_current):
+    locations = []
+
+    # Attempt to load spawns from file
+    if args.spawnpoint_scanning != 'nofile':
+        log.debug('Loading spawn points from json file @ %s', args.spawnpoint_scanning)
+        try:
+            with open(args.spawnpoint_scanning) as file:
+                locations = json.load(file)
+        except ValueError as e:
+            log.exception(e)
+            log.error('JSON error: %s; will fallback to database', e)
+        except IOError as e:
+            log.error('Error opening json file: %s; will fallback to database', e)
+
+    # No locations yet? Try the database!
+    if not len(locations):
+        log.debug('Loading spawn points from database')
+        locations = Pokemon.get_spawnpoints_in_hex(current_location, args.step_limit)
+
+    # Well shit...
+    if not len(locations):
+        raise Exception('No availabe spawn points!')
+
+    # locations[]:
+    # {"lat": 37.53079079414139, "lng": -122.28811690874117, "spawnpoint_id": "808f9f1601d", "time": 511
+
+    log.info('Total of %d spawns to track', len(locations))
+
+    locations.sort(key=itemgetter('time'))
+
+    if args.very_verbose:
+        for i in locations:
+            sec = i['time'] % 60
+            minute = (i['time'] / 60) % 60
+            m = 'Scan [{:02}:{:02}] ({}) @ {},{}'.format(minute, sec, i['time'], i['lat'], i['lng'])
+            log.debug(m)
+
+    # 'time' from json and db alike has been munged to appearance time as seconds after the hour
+    # Here we'll convert that to a real timestamp
+    for location in locations:
+        # For a scan which should cover all CURRENT pokemon, we can offset
+        # the comparison time by 15 minutes so that the "appears" time
+        # won't be rolled over to the next hour.
+
+        # TODO: Make it work. The original logic (commented out) was producing
+        #       bogus results if your first scan was in the last 15 minute of
+        #       the hour. Wrapping my head around this isn't work right now,
+        #       so I'll just drop the feature for the time being. It does need
+        #       to come back so that repositioning/pausing works more nicely,
+        #       but we can live without it too.
+
+        # if sps_scan_current:
+        #     cursec = (location['time'] + 900) % 3600
+        # else:
+        cursec = location['time']
+
+        if cursec > cur_sec():
+            # hasn't spawn in the current hour
+            from_now = location['time'] - cur_sec()
+            appears = now() + from_now
+        else:
+            # won't spawn till next hour
+            late_by = cur_sec() - location['time']
+            appears = now() + 3600 - late_by
+
+        location['appears'] = appears
+        location['leaves'] = appears + 900
+
+    # Put the spawn points in order of next appearance time
+    locations.sort(key=itemgetter('appears'))
+
+    # Match expected structure:
+    # locations = [((lat, lng, alt), ts_appears, ts_leaves),...]
+    retset = []
+    for location in locations:
+        retset.append(((location['lat'], location['lng'], 40.32), location['appears'], location['leaves']))
+
+    return retset
+
+
 
 def search_worker_thread(args, account_queue, account_failures, search_items_queue, pause_bit, encryption_lib_path, status, dbq, whq):
 
@@ -416,6 +531,7 @@ def search_worker_thread(args, account_queue, account_failures, search_items_que
                 api = FakePogoApi(args.mock)
             else:
                 api = PGoApi()
+                #print api
 
             if status['proxy_url']:
                 log.debug("Using proxy %s", status['proxy_url'])
@@ -500,7 +616,7 @@ def search_worker_thread(args, account_queue, account_failures, search_items_que
 
                 # Got the response, parse it out, send todo's to db/wh queues
                 try:
-                    parsed = parse_map(args, response_dict, step_location, dbq, whq)
+                    parsed = parse_map(args, response_dict, step_location, dbq, whq, api)
                     search_items_queue.task_done()
                     status[('success' if parsed['count'] > 0 else 'noitems')] += 1
                     consecutive_fails = 0
@@ -512,6 +628,31 @@ def search_worker_thread(args, account_queue, account_failures, search_items_que
                     consecutive_fails += 1
                     status['message'] = 'Map parse failed at {:6f},{:6f}, abandoning location. {} may be banned.'.format(step_location[0], step_location[1], account['username'])
                     log.exception(status['message'])
+                # if args.get_ivs and parsed:
+                #     # Get pokemon IVs
+                #     for pokemon in parsed['pokemons'].values():
+                #         status['message'] = \
+                #             'Getting IVs for encounter {}' \
+                #             .format(b64decode(pokemon['encounter_id']))
+                #         time.sleep(random.random() + 2)
+                #         response = encounter_request(api, pokemon, args.jitter)
+                #         if response['responses']['ENCOUNTER']['status'] != 1:
+                #             log.warning('Pokemon encounter {} failed'.format(
+                #                         b64decode(pokemon['encounter_id'])))
+                #         else:
+                #             encounter = response['responses']['ENCOUNTER']
+                #             data = encounter['wild_pokemon']['pokemon_data']
+                #             #print "in search:"
+                #             #print data
+                #             pokemon_ivs = {pokemon['encounter_id']: {
+                #                 'encounter_id': pokemon['encounter_id'],
+                #                 'iv_attack': data.get('individual_attack', 0),
+                #                 'iv_defense': data.get('individual_defense', 0),
+                #                 'iv_stamina': data.get('individual_stamina', 0),
+                #                 'move_1' : data.get('move_1', 0),
+                #                 'move_2' : data.get('move_2', 0)
+                #             }}
+                #             dbq.put((PokemonIVs, pokemon_ivs))
 
                 # Get detailed information about gyms
                 if args.gym_info and parsed:
@@ -630,6 +771,24 @@ def map_request(api, position, jitter=False):
                                    cell_id=cell_ids)
     except Exception as e:
         log.warning('Exception while downloading map: %s', e)
+        return False
+
+
+def encounter_request(api, pokemon, jitter=False):
+    position = [pokemon['latitude'], pokemon['longitude'], 0]
+    if jitter:
+        scan_location = jitterLocation(position)
+    else:
+        scan_location = position
+
+    try:
+        encounter_id = long(b64decode(pokemon['encounter_id']))
+        return api.encounter(encounter_id=encounter_id,
+                             spawn_point_id=pokemon['spawnpoint_id'],
+                             player_latitude=scan_location[0],
+                             player_longitude=scan_location[1])
+    except Exception as e:
+        log.warning('Exception while downloading pokemon ivs: %s', e)
         return False
 
 
