@@ -510,7 +510,6 @@ function openMapDirections (lat, lng) { // eslint-disable-line no-unused-vars
   window.open(url, '_blank')
 }
 
-
 function pokemonLabel (name, rarity, types, disappearTime, id, latitude, longitude, encounterId, ivAttack, ivDefense, ivStamina, move1, move2) {
   var disappearDate = new Date(disappearTime)
   var rarityDisplay = rarity ? '(' + rarity + ')' : ''
