@@ -28,6 +28,7 @@ log = logging.getLogger(__name__)
 
 args = get_args()
 flaskDb = FlaskDB()
+
 cache = TTLCache(maxsize=100, ttl=60 * 5)
 
 db_schema_version = 8
