@@ -759,7 +759,13 @@ function customizePokemonMarker (marker, item, skipNotification) {
   var sprite = pokemonSprites[Store.get('pokemonIcons')] || pokemonSprites['highres']
   var icon = getGoogleSprite(pokemonIndex, sprite, iconSize)
   //console.log(item);
-  
+
+  var animationDisabled = false
+  // if (isBounceDisabled === true) {
+  //   animationDisabled = true
+  // }
+
+>>>>>>> Unignored dist/js
   var marker = new google.maps.Marker({
     position: {
       lat: item['latitude'],
