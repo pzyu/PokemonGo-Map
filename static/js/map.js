@@ -761,9 +761,9 @@ function customizePokemonMarker (marker, item, skipNotification) {
   //console.log(item);
 
   var animationDisabled = false
-  if (isBounceDisabled === true) {
-    animationDisabled = true
-  }
+  // if (isBounceDisabled === true) {
+  //   animationDisabled = true
+  // }
 
   var marker = new google.maps.Marker({
     position: {
