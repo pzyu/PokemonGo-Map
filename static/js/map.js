@@ -241,7 +241,6 @@ var Store = {
     localStorage.removeItem(key)
   }
 }
->>>>>>> Added IV and moveset
 
 //
 // Functions
@@ -511,6 +510,7 @@ function openMapDirections (lat, lng) { // eslint-disable-line no-unused-vars
   window.open(url, '_blank')
 }
 
+
 function pokemonLabel (name, rarity, types, disappearTime, id, latitude, longitude, encounterId, ivAttack, ivDefense, ivStamina, move1, move2) {
   var disappearDate = new Date(disappearTime)
   var rarityDisplay = rarity ? '(' + rarity + ')' : ''
@@ -755,6 +755,24 @@ function isRangeActive (map) {
 }
 
 function customizePokemonMarker (marker, item, skipNotification) {
+  // Scale icon size up with the map exponentially
+  var iconSize = 2 + (map.getZoom() - 3) * (map.getZoom() - 3) * 0.2 + Store.get('iconSizeModifier')
+  var pokemonIndex = item['pokemon_id'] - 1
+  var sprite = pokemonSprites[Store.get('pokemonIcons')] || pokemonSprites['highres']
+  var icon = getGoogleSprite(pokemonIndex, sprite, iconSize)
+  //console.log(item);
+  
+  var marker = new google.maps.Marker({
+    position: {
+      lat: item['latitude'],
+      lng: item['longitude']
+    },
+    zIndex: 9999,
+    map: map,
+    icon: icon,
+    animationDisabled: animationDisabled
+  })
+
   marker.addListener('click', function () {
     this.setAnimation(null)
     this.animationDisabled = true
@@ -765,7 +783,7 @@ function customizePokemonMarker (marker, item, skipNotification) {
   }
 
   marker.infoWindow = new google.maps.InfoWindow({
-    content: pokemonLabel(item['pokemon_name'], item['pokemon_rarity'], item['pokemon_types'], item['disappear_time'], item['pokemon_id'], item['latitude'], item['longitude'], item['encounter_id']),
+    content: pokemonLabel(item['pokemon_name'], item['pokemon_rarity'], item['pokemon_types'], item['disappear_time'], item['pokemon_id'], item['latitude'], item['longitude'], item['encounter_id'], item['iv_attack'], item['iv_defense'], item['iv_stamina'], item['move_1'], item['move_2']),
     disableAutoPan: true
   })
 
@@ -778,6 +796,20 @@ function customizePokemonMarker (marker, item, skipNotification) {
     }
     if (marker.animationDisabled !== true) {
       marker.setAnimation(google.maps.Animation.BOUNCE)
+    }
+  }
+  if (item['iv_attack'] != null) {
+    var perfection = 100.0 * (item['iv_attack'] + item['iv_defense'] + item['iv_stamina']) / 45
+    if (notifiedMinPerfection > 0 && perfection >= notifiedMinPerfection) {
+      if (!skipNotification) {
+        if (Store.get('playSound')) {
+          audio.play()
+        }
+        sendNotification('A ' + perfection.toFixed(1) + '% perfect ' + item['pokemon_name'] + ' appeared!', 'Click to load map', 'static/icons/' + item['pokemon_id'] + '.png', item['latitude'], item['longitude'])
+      }
+      if (marker.animationDisabled !== true) {
+        marker.setAnimation(google.maps.Animation.BOUNCE)
+      }
     }
   }
 
@@ -1137,6 +1169,9 @@ function processPokemons (i, item) {
       item.marker = setupPokemonMarker(item, map)
       customizePokemonMarker(item.marker, item)
       mapData.pokemons[item['encounter_id']] = item
+      //item.marker = setupPokemonMarker(item)
+      //mapData.pokemons[encounterId] = item
+
     }
   }
 }

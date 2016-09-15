@@ -36,7 +36,7 @@ from pgoapi import utilities as util
 from pgoapi.exceptions import AuthException
 
 from .models import parse_map, Pokemon, PokemonIVs, hex_bounds, GymDetails, parse_gyms, MainWorker, WorkerStatus
-from .transform import generate_location_steps  
+from .transform import generate_location_steps 
 from .fakePogoApi import FakePogoApi
 from .utils import now
 import schedulers
@@ -493,8 +493,6 @@ def get_sps_location_list(args, current_location, sps_scan_current):
 
     return retset
 
-
-
 def search_worker_thread(args, account_queue, account_failures, search_items_queue, pause_bit, encryption_lib_path, status, dbq, whq):
 
     log.debug('Search worker thread starting')
@@ -628,6 +626,7 @@ def search_worker_thread(args, account_queue, account_failures, search_items_que
                     consecutive_fails += 1
                     status['message'] = 'Map parse failed at {:6f},{:6f}, abandoning location. {} may be banned.'.format(step_location[0], step_location[1], account['username'])
                     log.exception(status['message'])
+                    
                 # if args.get_ivs and parsed:
                 #     # Get pokemon IVs
                 #     for pokemon in parsed['pokemons'].values():
@@ -653,6 +652,32 @@ def search_worker_thread(args, account_queue, account_failures, search_items_que
                 #                 'move_2' : data.get('move_2', 0)
                 #             }}
                 #             dbq.put((PokemonIVs, pokemon_ivs))
+
+                if args.get_ivs and parsed:
+                    # Get pokemon IVs
+                    for pokemon in parsed['pokemons'].values():
+                        status['message'] = \
+                            'Getting IVs for encounter {}' \
+                            .format(b64decode(pokemon['encounter_id']))
+                        time.sleep(random.random() + 2)
+                        response = encounter_request(api, pokemon, args.jitter)
+                        if response['responses']['ENCOUNTER']['status'] != 1:
+                            log.warning('Pokemon encounter {} failed'.format(
+                                        b64decode(pokemon['encounter_id'])))
+                        else:
+                            encounter = response['responses']['ENCOUNTER']
+                            data = encounter['wild_pokemon']['pokemon_data']
+                            #print "in search:"
+                            #print data
+                            pokemon_ivs = {pokemon['encounter_id']: {
+                                'encounter_id': pokemon['encounter_id'],
+                                'iv_attack': data.get('individual_attack', 0),
+                                'iv_defense': data.get('individual_defense', 0),
+                                'iv_stamina': data.get('individual_stamina', 0),
+                                'move_1' : data.get('move_1', 0),
+                                'move_2' : data.get('move_2', 0)
+                            }}
+                            dbq.put((PokemonIVs, pokemon_ivs))
 
                 # Get detailed information about gyms
                 if args.gym_info and parsed:

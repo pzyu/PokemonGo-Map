@@ -15,9 +15,9 @@ from playhouse.pool import PooledMySQLDatabase
 from playhouse.shortcuts import RetryOperationalError
 from playhouse.migrate import migrate, MySQLMigrator, SqliteMigrator
 from datetime import datetime, timedelta
+from base64 import b64encode, b64decode
 from cachetools import TTLCache
 from cachetools import cached
-from base64 import b64encode, b64decode
 
 from . import config
 from .utils import get_pokemon_name, get_pokemon_rarity, get_pokemon_types, get_args
