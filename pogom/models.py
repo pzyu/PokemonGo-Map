@@ -837,6 +837,7 @@ def parse_map(args, map_dict, step_location, db_update_queue, wh_update_queue, a
 
                     poke_id = p['pokemon_data']['pokemon_id']
                     poke_rarity = get_pokemon_rarity(poke_id).lower()
+                    # If rare enough then open encounter and send webhook
                     if poke_rarity == "very rare" or poke_rarity == "ultra rare": 
                         print poke_rarity + ": " + str(poke_id)
 
